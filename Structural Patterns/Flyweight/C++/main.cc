@@ -1,54 +1,170 @@
-// The flyweight class contains a portion of the state of a
-// tree. These fields store values that are unique for each
-// particular tree. For instance, you won't find here the tree
-// coordinates. But the texture and colors shared between many
-// trees are here. Since this data is usually BIG, you'd waste a
-// lot of memory by keeping it in each tree object. Instead, we
-// can extract texture, color and other repeating data into a
-// separate object which lots of individual tree objects can
-// reference.
-class TreeType is
-    field name
-    field color
-    field texture
-    constructor TreeType(name, color, texture) { ... }
-    method draw(canvas, x, y) is
-        // 1. Create a bitmap of a given type, color & texture.
-        // 2. Draw the bitmap on the canvas at X and Y coords.
+/**
+ * Flyweight Design Pattern
+ *
+ * Intent: Lets you fit more objects into the available amount of RAM by sharing
+ * common parts of state between multiple objects, instead of keeping all of the
+ * data in each object.
+ */
 
-// Flyweight factory decides whether to re-use existing
-// flyweight or to create a new object.
-class TreeFactory is
-    static field treeTypes: collection of tree types
-    static method getTreeType(name, color, texture) is
-        type = treeTypes.find(name, color, texture)
-        if (type == null)
-            type = new TreeType(name, color, texture)
-            treeTypes.add(type)
-        return type
+struct SharedState
+{
+    std::string brand_;
+    std::string model_;
+    std::string color_;
 
-// The contextual object contains the extrinsic part of the tree
-// state. An application can create billions of these since they
-// are pretty small: just two integer coordinates and one
-// reference field.
-class Tree is
-    field x,y
-    field type: TreeType
-    constructor Tree(x, y, type) { ... }
-    method draw(canvas) is
-        type.draw(canvas, this.x, this.y)
+    SharedState(const std::string &brand, const std::string &model, const std::string &color)
+        : brand_(brand), model_(model), color_(color)
+    {
+    }
 
-// The Tree and the Forest classes are the flyweight's clients.
-// You can merge them if you don't plan to develop the Tree
-// class any further.
-class Forest is
-    field trees: collection of Trees
+    friend std::ostream &operator<<(std::ostream &os, const SharedState &ss)
+    {
+        return os << "[ " << ss.brand_ << " , " << ss.model_ << " , " << ss.color_ << " ]";
+    }
+};
 
-    method plantTree(x, y, name, color, texture) is
-        type = TreeFactory.getTreeType(name, color, texture)
-        tree = new Tree(x, y, type)
-        trees.add(tree)
+struct UniqueState
+{
+    std::string owner_;
+    std::string plates_;
 
-    method draw(canvas) is
-        foreach (tree in trees) do
-            tree.draw(canvas)
+    UniqueState(const std::string &owner, const std::string &plates)
+        : owner_(owner), plates_(plates)
+    {
+    }
+
+    friend std::ostream &operator<<(std::ostream &os, const UniqueState &us)
+    {
+        return os << "[ " << us.owner_ << " , " << us.plates_ << " ]";
+    }
+};
+
+/**
+ * The Flyweight stores a common portion of the state (also called intrinsic
+ * state) that belongs to multiple real business entities. The Flyweight accepts
+ * the rest of the state (extrinsic state, unique for each entity) via its
+ * method parameters.
+ */
+class Flyweight
+{
+private:
+    SharedState *shared_state_;
+
+public:
+    Flyweight(const SharedState *shared_state) : shared_state_(new SharedState(*shared_state))
+    {
+    }
+    Flyweight(const Flyweight &other) : shared_state_(new SharedState(*other.shared_state_))
+    {
+    }
+    ~Flyweight()
+    {
+        delete shared_state_;
+    }
+    SharedState *shared_state() const
+    {
+        return shared_state_;
+    }
+    void Operation(const UniqueState &unique_state) const
+    {
+        std::cout << "Flyweight: Displaying shared (" << *shared_state_ << ") and unique (" << unique_state << ") state.\n";
+    }
+};
+/**
+ * The Flyweight Factory creates and manages the Flyweight objects. It ensures
+ * that flyweights are shared correctly. When the client requests a flyweight,
+ * the factory either returns an existing instance or creates a new one, if it
+ * doesn't exist yet.
+ */
+class FlyweightFactory
+{
+    /**
+     * @var Flyweight[]
+     */
+private:
+    std::unordered_map<std::string, Flyweight> flyweights_;
+    /**
+     * Returns a Flyweight's string hash for a given state.
+     */
+    std::string GetKey(const SharedState &ss) const
+    {
+        return ss.brand_ + "_" + ss.model_ + "_" + ss.color_;
+    }
+
+public:
+    FlyweightFactory(std::initializer_list<SharedState> share_states)
+    {
+        for (const SharedState &ss : share_states)
+        {
+            this->flyweights_.insert(std::make_pair<std::string, Flyweight>(this->GetKey(ss), Flyweight(&ss)));
+        }
+    }
+
+    /**
+     * Returns an existing Flyweight with a given state or creates a new one.
+     */
+    Flyweight GetFlyweight(const SharedState &shared_state)
+    {
+        std::string key = this->GetKey(shared_state);
+        if (this->flyweights_.find(key) == this->flyweights_.end())
+        {
+            std::cout << "FlyweightFactory: Can't find a flyweight, creating new one.\n";
+            this->flyweights_.insert(std::make_pair(key, Flyweight(&shared_state)));
+        }
+        else
+        {
+            std::cout << "FlyweightFactory: Reusing existing flyweight.\n";
+        }
+        return this->flyweights_.at(key);
+    }
+    void ListFlyweights() const
+    {
+        size_t count = this->flyweights_.size();
+        std::cout << "\nFlyweightFactory: I have " << count << " flyweights:\n";
+        for (std::pair<std::string, Flyweight> pair : this->flyweights_)
+        {
+            std::cout << pair.first << "\n";
+        }
+    }
+};
+
+// ...
+void AddCarToPoliceDatabase(
+    FlyweightFactory &ff, const std::string &plates, const std::string &owner,
+    const std::string &brand, const std::string &model, const std::string &color)
+{
+    std::cout << "\nClient: Adding a car to database.\n";
+    const Flyweight &flyweight = ff.GetFlyweight({brand, model, color});
+    // The client code either stores or calculates extrinsic state and passes it
+    // to the flyweight's methods.
+    flyweight.Operation({owner, plates});
+}
+
+/**
+ * The client code usually creates a bunch of pre-populated flyweights in the
+ * initialization stage of the application.
+ */
+
+int main()
+{
+    FlyweightFactory *factory = new FlyweightFactory({{"Chevrolet", "Camaro2018", "pink"}, {"Mercedes Benz", "C300", "black"}, {"Mercedes Benz", "C500", "red"}, {"BMW", "M5", "red"}, {"BMW", "X6", "white"}});
+    factory->ListFlyweights();
+
+    AddCarToPoliceDatabase(*factory,
+                            "CL234IR",
+                            "James Doe",
+                            "BMW",
+                            "M5",
+                            "red");
+
+    AddCarToPoliceDatabase(*factory,
+                            "CL234IR",
+                            "James Doe",
+                            "BMW",
+                            "X1",
+                            "red");
+    factory->ListFlyweights();
+    delete factory;
+
+    return 0;
+}

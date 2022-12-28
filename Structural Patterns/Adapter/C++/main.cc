@@ -1,57 +1,68 @@
-// Say you have two classes with compatible interfaces:
-// RoundHole and RoundPeg.
-class RoundHole is
-    constructor RoundHole(radius) { ... }
+/**
+ * The Target defines the domain-specific interface used by the client code.
+ */
+class Target {
+ public:
+  virtual ~Target() = default;
 
-    method getRadius() is
-        // Return the radius of the hole.
+  virtual std::string Request() const {
+    return "Target: The default target's behavior.";
+  }
+};
 
-    method fits(peg: RoundPeg) is
-        return this.getRadius() >= peg.getRadius()
+/**
+ * The Adaptee contains some useful behavior, but its interface is incompatible
+ * with the existing client code. The Adaptee needs some adaptation before the
+ * client code can use it.
+ */
+class Adaptee {
+ public:
+  std::string SpecificRequest() const {
+    return ".eetpadA eht fo roivaheb laicepS";
+  }
+};
 
-class RoundPeg is
-    constructor RoundPeg(radius) { ... }
+/**
+ * The Adapter makes the Adaptee's interface compatible with the Target's
+ * interface.
+ */
+class Adapter : public Target {
+ private:
+  Adaptee *adaptee_;
 
-    method getRadius() is
-        // Return the radius of the peg.
+ public:
+  Adapter(Adaptee *adaptee) : adaptee_(adaptee) {}
+  std::string Request() const override {
+    std::string to_reverse = this->adaptee_->SpecificRequest();
+    std::reverse(to_reverse.begin(), to_reverse.end());
+    return "Adapter: (TRANSLATED) " + to_reverse;
+  }
+};
 
+/**
+ * The client code supports all classes that follow the Target interface.
+ */
+void ClientCode(const Target *target) {
+  std::cout << target->Request();
+}
 
-// But there's an incompatible class: SquarePeg.
-class SquarePeg is
-    constructor SquarePeg(width) { ... }
+int main() {
+  std::cout << "Client: I can work just fine with the Target objects:\n";
+  Target *target = new Target;
+  ClientCode(target);
+  std::cout << "\n\n";
+  Adaptee *adaptee = new Adaptee;
+  std::cout << "Client: The Adaptee class has a weird interface. See, I don't understand it:\n";
+  std::cout << "Adaptee: " << adaptee->SpecificRequest();
+  std::cout << "\n\n";
+  std::cout << "Client: But I can work with it via the Adapter:\n";
+  Adapter *adapter = new Adapter(adaptee);
+  ClientCode(adapter);
+  std::cout << "\n";
 
-    method getWidth() is
-        // Return the square peg width.
+  delete target;
+  delete adaptee;
+  delete adapter;
 
-
-// An adapter class lets you fit square pegs into round holes.
-// It extends the RoundPeg class to let the adapter objects act
-// as round pegs.
-class SquarePegAdapter extends RoundPeg is
-    // In reality, the adapter contains an instance of the
-    // SquarePeg class.
-    private field peg: SquarePeg
-
-    constructor SquarePegAdapter(peg: SquarePeg) is
-        this.peg = peg
-
-    method getRadius() is
-        // The adapter pretends that it's a round peg with a
-        // radius that could fit the square peg that the adapter
-        // actually wraps.
-        return peg.getWidth() * Math.sqrt(2) / 2
-
-
-// Somewhere in client code.
-hole = new RoundHole(5)
-rpeg = new RoundPeg(5)
-hole.fits(rpeg) // true
-
-small_sqpeg = new SquarePeg(5)
-large_sqpeg = new SquarePeg(10)
-hole.fits(small_sqpeg) // this won't compile (incompatible types)
-
-small_sqpeg_adapter = new SquarePegAdapter(small_sqpeg)
-large_sqpeg_adapter = new SquarePegAdapter(large_sqpeg)
-hole.fits(small_sqpeg_adapter) // true
-hole.fits(large_sqpeg_adapter) // false
+  return 0;
+}
